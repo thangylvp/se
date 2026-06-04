@@ -1,39 +1,26 @@
 # dn_asr environment — conda + pip
 #
-# Create the conda env (Python only), then pip-install this file:
+#   conda create -n dn_asr python=3.11 -y && conda activate dn_asr
+#   # GPU torch first (CUDA 12.8 build — what this repo is verified against; Blackwell/RTX 5090):
+#   pip install torch==2.8.0 --index-url https://download.pytorch.org/whl/cu128
+#   pip install -r requirements.txt
 #
-#     conda create -n dn_asr python=3.11 -y
-#     conda activate dn_asr
-#     # GPU torch (CUDA 12.8 build — what this repo was verified against):
-#     pip install torch==2.8.0 --index-url https://download.pytorch.org/whl/cu128
-#     # then the rest:
-#     pip install -r requirements.txt
-#
-# Versions below are the exact ones the DeepVQE checkpoint inference was
-# verified against (produces output identical to the teammate's aecdns pipeline).
-# torch is intentionally NOT pinned here so you can install the right CUDA build
-# from the line above first; if you skip that, `pip install torch==2.8.0` works
-# for CPU-only.
+# torch is installed separately (above) so you get the right CUDA build; for
+# CPU-only, `pip install torch==2.8.0` works too. Versions below are the exact
+# ones this repo was verified against.
 
-# --- core numeric / DL ---
-einops==0.8.2
-numpy==1.26.4
+# --- deep learning / ASR ---
+transformers==4.51.3      # frozen Whisper (WhisperForConditionalGeneration / Processor)
+einops==0.8.2             # tensor rearrange in DeepVQE
 
 # --- audio I/O + DSP ---
-librosa==0.11.0
-soundfile==0.13.1
-scipy==1.17.1
+librosa==0.11.0           # resampling, audio load
+soundfile==0.13.1         # wav/flac read/write
+numpy==1.26.4
 
-# --- config / utils ---
-omegaconf==2.3.0
-pyyaml==6.0.3
+# --- metrics / utils ---
+jiwer==4.0.0              # WER
 tqdm==4.67.3
 
-# --- SE evaluation metrics (used by aecdns; handy for sanity-checking denoising) ---
-pesq==0.0.4
-pystoi==0.3.3
-
-# NOTE on the next phase (training SE with an ASR loss):
-#   The ASR backbone (e.g. wav2vec2 / whisper) and its deps are NOT included yet
-#   — add them once we pick the ASR model to back-prop through. Likely additions:
-#   transformers, torchaudio (matching the torch build), jiwer (WER).
+# transformers pulls in tokenizers / huggingface-hub / safetensors automatically.
+# A Hugging Face token (in .env as HF_TOKEN) is needed to download the Whisper model.
