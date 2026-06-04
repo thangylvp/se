@@ -1,0 +1,56 @@
+# ---- secrets / env ----
+.env
+.env.*
+*.pem
+
+# ---- experiment outputs / artifacts (large, regenerable) ----
+runs/
+out/
+outputs/
+logs/
+wandb/
+tensorboard/
+lightning_logs/
+*.tar
+*.ckpt
+*.pt
+*.pth
+*.onnx
+*.safetensors
+
+# ---- data / models (live in ../dataset, ../ckpt; never commit) ----
+data/
+dataset/
+datasets/
+*.wav
+*.flac
+*.mp3
+*.npy
+*.npz
+
+# ---- caches ----
+.cache/
+~/.cache/
+hf_cache/
+**/__pycache__/
+*.py[cod]
+*$py.class
+.ipynb_checkpoints/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ---- python envs / packaging ----
+.venv/
+venv/
+env/
+*.egg-info/
+build/
+dist/
+.python-version
+
+# ---- editor / OS ----
+.vscode/
+.idea/
+.DS_Store
+*.swp
