@@ -18,6 +18,10 @@ lightning_logs/
 *.onnx
 *.safetensors
 
+# ...but DO track the released "model D" checkpoint used for the WER report
+!checkpoints/
+!checkpoints/model_D.tar
+
 # ---- data / models (live in ../dataset, ../ckpt; never commit) ----
 data/
 dataset/
