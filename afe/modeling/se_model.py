@@ -1,11 +1,8 @@
-"""
-Self-contained DeepVQE speech-enhancement model + checkpoint loader.
+"""DeepVQE speech-enhancement model wrapped with the fixed STFT front/back end.
 
-This wraps the vendored `deepvqe.DeepVQE` (identical to aecdns/models/deepvqe.py
-and deepvqe/deepvqe.py, verified byte-for-byte) with the exact STFT front/back
-end used by the teammate's training & inference pipeline (aecdns).
+Wraps the vendored `DeepVQE` (verified identical to the teammate's arch) with the
+exact STFT pipeline used by aecdns/models/modules/wrapper.py::STFTWrapper:
 
-Pipeline (must match aecdns/models/modules/wrapper.py::STFTWrapper):
     waveform (B, L) @ 16 kHz
       -> torch.stft(n_fft=512, hop=256, win=512, periodic Hann, onesided, complex)
       -> view_as_real -> (B, F=257, T, 2)
@@ -13,20 +10,19 @@ Pipeline (must match aecdns/models/modules/wrapper.py::STFTWrapper):
       -> complex  -> torch.istft(same params)
       -> pad/trim to original length -> (B, L)
 
-The checkpoint state_dict keys are prefixed `model.` because training saved an
-`STFTWrapper` whose `self.model = DeepVQE()`. We strip that prefix and load the
-DeepVQE body directly (matches aecdns/utils/checkpoint_utils.py::load_checkpoint).
+Checkpoint loading/saving lives in `afe.checkpoint.io`.
 """
 import torch
 import torch.nn as nn
 
-from deepvqe import DeepVQE
+from afe.modeling.deepvqe import DeepVQE
+from afe.utils.constants import SE_HOP, SE_N_FFT, SE_WIN
 
 
 class STFTWrapper(nn.Module):
     """Waveform -> STFT -> DeepVQE -> iSTFT -> waveform. Mirrors aecdns STFTWrapper."""
 
-    def __init__(self, model, n_fft=512, hop_len=256, win_len=512):
+    def __init__(self, model, n_fft=SE_N_FFT, hop_len=SE_HOP, win_len=SE_WIN):
         super().__init__()
         self.model = model
         self.n_fft = n_fft
@@ -60,20 +56,6 @@ class STFTWrapper(nn.Module):
         return output
 
 
-def load_se_model(checkpoint_path, device="cpu", n_fft=512, hop_len=256, win_len=512):
-    """Build STFTWrapper(DeepVQE()) and load a `.tar` checkpoint into it.
-
-    Handles both the full training checkpoint ({'model': sd, 'epoch': ...}) and a
-    raw state_dict, stripping the `model.` prefix so the DeepVQE body loads cleanly.
-    """
-    device = torch.device(device)
-    model = STFTWrapper(DeepVQE(), n_fft=n_fft, hop_len=hop_len, win_len=win_len)
-
-    ckpt = torch.load(checkpoint_path, map_location=device)
-    sd = ckpt["model"] if (isinstance(ckpt, dict) and "model" in ckpt) else ckpt
-    sd = {(k[len("model."):] if k.startswith("model.") else k): v for k, v in sd.items()}
-
-    # strict=True: any mismatch means the architecture is wrong — we want it to fail loud.
-    model.model.load_state_dict(sd, strict=True)
-    model = model.to(device).eval()
-    return model
+def build_se_model(n_fft=SE_N_FFT, hop_len=SE_HOP, win_len=SE_WIN) -> STFTWrapper:
+    """Fresh STFTWrapper(DeepVQE()) with default STFT params."""
+    return STFTWrapper(DeepVQE(), n_fft=n_fft, hop_len=hop_len, win_len=win_len)

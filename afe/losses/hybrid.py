@@ -1,12 +1,14 @@
-"""HybridLoss — copied verbatim from SEtrain/loss_factory.py (the teammate's SE
-training loss): compressed real/imag + magnitude MSE + SI-SNR, computed between
-two waveforms. This is the fidelity / stabilizer term (λ_se) in Exp 2."""
+"""HybridLoss — vendored from SEtrain/loss_factory.py (the teammate's SE training
+loss): compressed real/imag + magnitude MSE + SI-SNR between two waveforms. This
+is the fidelity / stabilizer term (lambda_se) in the ASR-aware recipe."""
 import torch
 import torch.nn as nn
 
+from afe.utils.constants import SE_HOP, SE_N_FFT, SE_WIN
+
 
 class HybridLoss(nn.Module):
-    def __init__(self, n_fft=512, hop_len=256, win_len=512, compress_factor=0.3,
+    def __init__(self, n_fft=SE_N_FFT, hop_len=SE_HOP, win_len=SE_WIN, compress_factor=0.3,
                  eps=1e-12, lamda_ri=30, lamda_mag=70):
         super().__init__()
         self.n_fft, self.hop_len, self.win_len = n_fft, hop_len, win_len

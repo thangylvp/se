@@ -1,0 +1,16 @@
+# Exp 2 — first ASR-aware fine-tune (PoC success, the standing recipe).
+# CE primary + small HybridLoss stabilizer; ~1 epoch. See docs/exps.md.
+checkpoint: "../ckpt/deepvqe/model_240.tar"   # warm-start
+librispeech: "../dataset/LibriSpeech/train-clean-100"
+noise_dir: "../dataset/musan/noise"
+whisper: "openai/whisper-small"
+steps: 3000
+batch_size: 8
+lr: 1.0e-4
+warmup_steps: 300
+min_lr_ratio: 0.1
+lambda_ce: 1.0
+lambda_se: 0.05
+lambda_feat: 0.0
+out_dir: "runs/exp2"
+save_every: 1000

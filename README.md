@@ -1,92 +1,92 @@
-# dn_asr
+# afe — Audio Front-End for ASR-aware Speech Enhancement
 
-Goal: train a speech-enhancement (SE) front-end that actually helps our ASR model
-(lower WER), not just one that sounds clean. The teammate's DeepVQE denoiser is
-great at denoising but doesn't improve WER as an ASR pre-processor — so we plan to
-fine-tune it with an ASR-aware loss.
+Fine-tune a **DeepVQE speech-enhancement front-end so it lowers a downstream ASR's
+WER**, not just denoises. A DeepVQE trained on signal-fidelity loss denoises well
+but *hurts* WER as an ASR pre-processor; we fix that by fine-tuning it with a
+**frozen-Whisper ASR loss** (decoder cross-entropy as the primary driver).
 
-**Step 1 (done): reproduce the teammate's denoiser inference and confirm the
-architecture.** This README documents how the checkpoint is run.
+See `docs/exps.md` for the experiment log, `docs/related_works.md` for the
+literature, and `docs/report_wer.md` for the headline WER results.
 
-## What the checkpoint is
-
-`ckpt/deepvqe/model_240 2.tar` — a **DeepVQE** denoiser, epoch 240, `best_score`
-2.273. It's a `torch.save` dict:
+## Layout (detectron2-lite)
 
 ```
-{ 'model': <state_dict, 156 tensors>, 'epoch': 240, 'optimizer', 'scheduler', 'best_score' }
+afe/                 # the installable package
+├── modeling/        # DeepVQE arch + STFTWrapper
+├── data/            # audio ops, LibriSpeech, on-the-fly mixing, robot test set
+├── losses/          # HybridLoss (fidelity) + asr_aware composite loss
+├── asr/             # frozen-Whisper wrapper + differentiable log-mel
+├── engine/          # training loop
+├── solver/          # optimizer + LR schedule
+├── evaluation/      # headroom / trajectory / robot evaluators
+├── checkpoint/      # checkpoint load/save
+├── config/          # config dataclasses + YAML loader
+└── utils/           # constants (SR/STFT params) + text metrics (WER/CER)
+configs/             # YAML experiment configs (train/, eval/)
+tools/               # thin CLIs, run as `python -m tools.<name>`
+tests/  docs/  results/  checkpoints/
 ```
 
-The `model` state_dict keys are prefixed `model.` (e.g. `model.enblock1.conv.weight`)
-because training wrapped the net as `STFTWrapper(self.model = DeepVQE())`. To load
-into a bare `DeepVQE`, strip the `model.` prefix.
-
-### Architecture (verified by exact shape match)
-
-DeepVQE — complex-spectrogram U-Net, defined identically in `deepvqe/deepvqe.py`
-and `aecdns/models/deepvqe.py` (byte-for-byte identical; vendored here as
-`deepvqe.py`):
-
-- Input: STFT real/imag, shape `(B, F=257, T, 2)`
-- `FE`: power-law feature compression (divide by `mag^0.7`, c=0.3)
-- Encoder: 5 blocks `(2→64→128→128→128→128)`, freq-stride 2 each → `(B,128,T,9)`
-- Bottleneck: GRU `1152→576` + FC `576→1152` (1152 = 128·9, 576 = 64·9)
-- Decoder: 5 sub-pixel blocks with skip connections → `(B,27,T,257)`
-- `CCM`: complex convolving mask (3×3) applied to the noisy STFT → `(B,257,T,2)`
-
-### Exact STFT pipeline (must be matched, incl. for training)
-
-| param | value |
-|-------|-------|
-| sample rate | **16000 Hz** (resample in/out if input differs) |
-| n_fft | 512 |
-| hop_length | 256 |
-| win_length | 512 |
-| window | `torch.hann_window(512)` (periodic) |
-| stft | `onesided=True, return_complex=True` → `view_as_real` |
-| istft | same params; pad/trim to original length |
-
-No input gain/RMS normalization is applied — the model runs directly on STFT
-coefficients (the only "normalization" is the internal `FE` magnitude compression).
-
-Source of truth: `aecdns/models/modules/wrapper.py::STFTWrapper`,
-`aecdns/inference/infer_file.py`, `aecdns/utils/checkpoint_utils.py`.
-
-## How to run inference (this folder, self-contained)
-
-Files here vendor everything needed — no dependency on the `aecdns` tree:
-- `deepvqe.py` — DeepVQE architecture (exact copy)
-- `se_model.py` — `STFTWrapper` + `load_se_model()` checkpoint loader
-- `infer.py` — CLI
+## Install
 
 ```bash
-conda activate dn_asr   # see requirements.txt for env setup
-python infer.py \
-    --checkpoint "../ckpt/deepvqe/model_240 2.tar" \
-    --input ../noisy_audio/audio_8c3e9f2b_1773733142.wav \
-    --output-dir out
-# directory input + GPU:
-python infer.py --checkpoint <ckpt.tar> --input <wav_dir> --output-dir out --device 0
+conda create -n afe python=3.11 -y && conda activate afe
+pip install torch==2.8.0 --index-url https://download.pytorch.org/whl/cu128  # GPU (cu128)
+pip install -e ".[dev]"
+cp .env.example .env && $EDITOR .env   # add HF_TOKEN (Whisper is public; token avoids rate limits)
 ```
 
-**Verified:** output is bit-identical (max abs diff `0.0`) to the teammate's
-`aecdns/inference/infer_file.py` on the same input, and `load_state_dict` is
-`strict=True` (any arch mismatch fails loud). On a noisy sample RMS dropped
-0.063 → 0.032 with no NaNs and length preserved.
+Datasets and the warm-start checkpoint are not in git — see "External data" below.
 
-## Environment
+## Quickstart
 
-Verified stack: `python 3.11`, `torch 2.8.0+cu128`, `librosa 0.11`,
-`soundfile 0.13`, `einops 0.8`, `numpy 1.26`. See `requirements.txt` for the
-conda + pip setup. (The teammate's `aecdns` pins `torch==1.11`, but 2.8 runs the
-model identically — the STFT/iSTFT API is unchanged.)
+```bash
+set -a; source .env; set +a   # load HF_TOKEN
 
-## Next step — training with an ASR loss
+# denoise a file/dir -> *_enhanced.wav
+python -m tools.infer --checkpoint checkpoints/model_D.tar --input clip.wav --output-dir out
 
-The teammate's SE training loss is **HybridLoss** (spectral RI + magnitude MSE):
-`SEtrain/loss_factory.py::HybridLoss` (λ_ri=30, λ_mag=70, same STFT params as
-above). It optimizes signal fidelity, which explains good denoising but no WER
-gain. Plan: keep enhancement output as waveform and add an ASR-feature / CTC loss
-from a frozen ASR model on the enhanced audio, so gradients push the SE front-end
-toward what the recognizer needs. ASR backbone + deps to be added to
-`requirements.txt` once chosen.
+# transcribe a file (ASR only, no denoise)
+python -m tools.transcribe out/clip_enhanced.wav --model openai/whisper-large-v3 --fp16
+
+# one file: without vs with denoising, + WER/CER
+python -m tools.test_one clip.wav
+
+# gradient-flow smoke test (always run before real training)
+python -m tools.train --smoke --librispeech ../dataset/LibriSpeech/test-clean
+
+# train the ASR-aware fine-tune (config-driven; CLI flags override YAML)
+python -m tools.train --config configs/train/exp2.yaml --device 0
+
+# LibriSpeech WER eval
+python -m tools.eval_headroom --checkpoint checkpoints/model_D.tar --device 0
+python -m tools.eval_trajectory --checkpoints runs/exp4/deepvqe_step3000.tar runs/exp4/deepvqe_step9000.tar
+
+# real Vietnamese robot test set (no-denoise vs denoise), with CSV reports
+python -m tools.eval_robot --model openai/whisper-large-v3 --fp16 --detail \
+    --per-file-csv outputs/robot_per_file.csv --folder-csv outputs/robot_folder.csv
+```
+
+## External data (not in git)
+
+Scripts default to siblings of this repo: `../dataset/` (LibriSpeech + MUSAN) and
+`../ckpt/deepvqe/model_240.tar` (warm-start checkpoint). All paths are overridable
+via CLI flags / configs. Download steps are in `docs/` and the dataset constants in
+`afe/utils/constants.py`. The released best checkpoint `checkpoints/model_D.tar` is
+committed.
+
+## Config
+
+Experiments are YAML over a dataclass (`afe/config/defaults.py`); no yacs/registry.
+CLI flags override YAML, which overrides dataclass defaults. The fixed LibriSpeech
+eval protocol lives in `configs/eval/librispeech.yaml` — do not change it (breaks
+comparability with `results/`).
+
+## Tests
+
+```bash
+pytest -q
+```
+Covers metrics, config loading, the robot pairing, SE forward/checkpoint round-trip,
+and that `DiffLogMel` matches the HF Whisper feature extractor (the invariant the
+training gradient depends on).
