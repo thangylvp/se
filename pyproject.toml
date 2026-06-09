@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "afe"
+version = "0.1.0"
+description = "Audio Front-End: ASR-aware speech-enhancement training (DeepVQE + frozen Whisper)"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "transformers==4.51.3",
+    "einops==0.8.2",
+    "librosa==0.11.0",
+    "soundfile==0.13.1",
+    "numpy==1.26.4",
+    "jiwer==4.0.0",
+    "tqdm==4.67.3",
+    "pyyaml>=6.0",
+]
+# NOTE: install torch separately for the right CUDA build, e.g.
+#   pip install torch==2.8.0 --index-url https://download.pytorch.org/whl/cu128
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff>=0.5"]
+
+# No console-script shortcuts — run tools as modules, e.g. `python -m tools.train`.
+
+[tool.setuptools]
+packages = ["afe", "afe.config", "afe.modeling", "afe.data", "afe.losses",
+            "afe.asr", "afe.engine", "afe.solver", "afe.evaluation",
+            "afe.checkpoint", "afe.utils", "tools"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
