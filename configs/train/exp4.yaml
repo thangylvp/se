@@ -1,0 +1,16 @@
+# Exp 4 — train longer (15k steps + cosine decay). VERDICT: no gain over Exp 2
+# (WER plateaus by step 3000). Kept for reproducibility. See docs/exps.md.
+checkpoint: "../ckpt/deepvqe/model_240.tar"
+librispeech: "../dataset/LibriSpeech/train-clean-100"
+noise_dir: "../dataset/musan/noise"
+whisper: "openai/whisper-small"
+steps: 15000
+batch_size: 8
+lr: 1.0e-4
+warmup_steps: 300
+min_lr_ratio: 0.1
+lambda_ce: 1.0
+lambda_se: 0.05
+lambda_feat: 0.0
+out_dir: "runs/exp4"
+save_every: 3000

@@ -1,0 +1,16 @@
+# Exp 5 — add encoder feature-matching (lambda_feat). VERDICT: NEGATIVE, hurts
+# WER (esp. low SNR). Kept to document the ablation. See docs/exps.md.
+checkpoint: "../ckpt/deepvqe/model_240.tar"
+librispeech: "../dataset/LibriSpeech/train-clean-100"
+noise_dir: "../dataset/musan/noise"
+whisper: "openai/whisper-small"
+steps: 3000
+batch_size: 8
+lr: 1.0e-4
+warmup_steps: 300
+min_lr_ratio: 0.1
+lambda_ce: 1.0
+lambda_se: 0.05
+lambda_feat: 2.0       # FEAT_LAYERS=(2,4,6) in afe/losses/asr_aware.py
+out_dir: "runs/exp5"
+save_every: 1500

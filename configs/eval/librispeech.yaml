@@ -1,0 +1,8 @@
+# Fixed LibriSpeech eval protocol (do NOT change — breaks comparability with results/).
+librispeech: "../dataset/LibriSpeech/test-clean"
+noise_dir: "../dataset/musan/noise"
+whisper: "openai/whisper-small"
+n_utts: 200
+snrs: [-10, -5, 0, 5, 10, 20]
+seed: 1234
+num_beams: 1
